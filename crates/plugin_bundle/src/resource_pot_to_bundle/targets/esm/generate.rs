@@ -13,7 +13,7 @@ use farmfe_core::{
 
 use crate::resource_pot_to_bundle::{
   bundle::{
-    bundle_external::{ExternalReferenceExport, ExternalReferenceImport, ReferenceKind},
+    bundle_reference::{ExternalReferenceExport, ExternalReferenceImport, ReferenceKind},
     ModuleAnalyzerManager,
   },
   uniq_name::BundleVariable,
@@ -171,7 +171,7 @@ impl EsmGenerate {
         specifiers,
         src: Box::new(Str {
           span: DUMMY_SP,
-          value: source.to_string().as_str().into(),
+          value: source.to_url().as_str().into(),
           raw: None,
         }),
         type_only: false,

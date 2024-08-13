@@ -1,4 +1,4 @@
-//__farm_runtime.f5dc5abe.mjs:
+//__farm_runtime.af77daf5.mjs:
  (globalThis || window || global)['__farm_default_namespace__'] = {__FARM_TARGET_ENV__: 'browser'};function _interop_require_default(obj) {
     return obj && obj.__esModule ? obj : {
         default: obj
@@ -63,10 +63,11 @@
     "use strict";
     console.log('runtime/index.js')(globalThis || window || global)['__farm_default_namespace__'].__farm_module_system__.setPlugins([]);
 });
+index_js_cjs();
 })());
 
 //index.js:
- import "./__farm_runtime.f5dc5abe.mjs";import "./index_7ecc.js";(function(_){for(var r in _){_[r].__farm_resource_pot__='index_7d8a.js';(globalThis || window || global)['__farm_default_namespace__'].__farm_module_system__.register(r,_[r])}})({"363fc137":function  (module, exports, farmRequire, farmDynamicRequire) {
+ import "./__farm_runtime.af77daf5.mjs";import "./index_7ecc.js";(function(_){for(var r in _){_[r].__farm_resource_pot__='index_7d8a.js';(globalThis || window || global)['__farm_default_namespace__'].__farm_module_system__.register(r,_[r])}})({"363fc137":function  (module, exports, farmRequire, farmDynamicRequire) {
     console.log('utils.js');
 }
 ,
