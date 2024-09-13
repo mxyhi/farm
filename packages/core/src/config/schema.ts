@@ -28,8 +28,8 @@ const baseRewriteSchema = z.union([
     .returns(z.union([z.string(), z.promise(z.string())]))
 ]);
 
-const stringRewriteSchema = baseRewriteSchema;
-const functionRewriteSchema = baseRewriteSchema;
+// const stringRewriteSchema = baseRewriteSchema;
+// const functionRewriteSchema = baseRewriteSchema;
 
 const pathFilterSchema = z.union([
   z.string(),
@@ -138,7 +138,14 @@ const previewServerSchema = z.object({
   strictPort: z.boolean().optional(),
   open: z.boolean().optional(),
   // cors: z.boolean().optional(),
-  headers: z.record(z.string()).optional()
+  headers: z.record(z.string()).optional(),
+  output: z.object({
+    path: z.string().optional(),
+    publicPath: z.string().optional()
+  }),
+  distDir: z.string().optional(),
+  // TODO any type
+  https: z.any().optional()
 });
 
 const compilationConfigSchema = z
