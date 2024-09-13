@@ -132,6 +132,15 @@ const serverSchema = z
   })
   .strict();
 
+const previewServerSchema = z.object({
+  host: z.union([z.string(), z.boolean()]).optional(),
+  port: z.number().positive().int().optional(),
+  strictPort: z.boolean().optional(),
+  open: z.boolean().optional(),
+  // cors: z.boolean().optional(),
+  headers: z.record(z.string()).optional()
+});
+
 const compilationConfigSchema = z
   .object({
     root: z.string().optional(),
@@ -157,7 +166,9 @@ const compilationConfigSchema = z
     externalNodeBuiltins: z
       .union([z.boolean(), z.array(z.string())])
       .optional(),
-    mode: z.string().optional(),
+    mode: z
+      .union([z.literal('development'), z.literal('production')])
+      .optional(),
     watch: z
       .union([
         z.boolean(),
@@ -385,12 +396,13 @@ const FarmConfigSchema = z
     envDir: z.string().optional(),
     envPrefix: z.union([z.string(), z.array(z.string())]).optional(),
     publicDir: z.string().optional(),
-    formatTimer: z.string().optional(),
+    formatTimer: z.union([z.literal('ms'), z.literal('s')]).optional(),
     plugins: z.array(z.any()).optional(),
     vitePlugins: z.array(z.any()).optional(),
     compilation: compilationConfigSchema.optional(),
     mode: z.string().optional(),
     server: serverSchema.optional(),
+    preview: previewServerSchema.optional(),
     // TODO ANY type
     customLogger: z.any().optional()
   })
