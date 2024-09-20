@@ -1,5 +1,25 @@
 # @farmfe/core
 
+## 1.3.22
+
+### Patch Changes
+
+- 5f0c02d2: bump runtime version
+- Updated dependencies [5f0c02d2]
+  - @farmfe/runtime@0.12.4
+
+## 1.3.21
+
+### Patch Changes
+
+- 1b1a7c17: compatible `import default from "module"`
+
+## 1.3.20
+
+### Patch Changes
+
+- ca00a930: fix hmr update no in time
+
 ## 1.3.19
 
 ### Patch Changes

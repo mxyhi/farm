@@ -28,30 +28,22 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import fse from 'fs-extra';
 
-import { Compiler } from './compiler/index.js';
 import { loadEnv, setProcessEnv } from './config/env.js';
 import {
   UserConfig,
-  checkClearScreen,
-  getConfigFilePath,
   normalizePublicDir,
   resolveConfig
 } from './config/index.js';
 import { Server } from './server/index.js';
-import { compilerHandler } from './utils/build.js';
-import { colors } from './utils/color.js';
+import { PersistentCacheBrand, bold, colors, green } from './utils/color.js';
 import { Logger } from './utils/logger.js';
 
+import {
+  createCompiler,
+  resolveConfigureCompilerHook
+} from './compiler/utils.js';
 import { __FARM_GLOBAL__ } from './config/_global.js';
-import type {
-  FarmCliOptions,
-  ResolvedUserConfig,
-  UserPreviewServerConfig
-} from './config/types.js';
-// import { logError } from './server/error.js';
-// import { lazyCompilation } from './server/middlewares/lazy-compilation.js';
-
-import type { JsPlugin } from './plugin/type.js';
+import type { FarmCliOptions, ResolvedUserConfig } from './config/types.js';
 
 // export async function start(
 //   inlineConfig?: FarmCliOptions & UserConfig
@@ -80,30 +72,6 @@ import type { JsPlugin } from './plugin/type.js';
 //     await devServer.listen();
 //   } catch (error) {
 //     logger.error('Failed to start the server', { exit: true, error });
-//   }
-// }
-
-// export async function build(
-//   inlineConfig?: FarmCliOptions & UserConfig
-// ): Promise<void> {
-//   inlineConfig = inlineConfig ?? {};
-//   const logger = inlineConfig.logger ?? new Logger();
-//   setProcessEnv('production');
-
-//   const resolvedUserConfig = await resolveConfig(
-//     inlineConfig,
-//     'build',
-//     'production',
-//     'production',
-//     false
-//   );
-
-//   try {
-//     await createBundleHandler(resolvedUserConfig, logger);
-//     // copy resources under publicDir to output.path
-//     await copyPublicDirectory(resolvedUserConfig, logger);
-//   } catch (err) {
-//     logger.error(`Failed to build: ${err}`, { exit: true });
 //   }
 // }
 
@@ -214,6 +182,145 @@ import type { JsPlugin } from './plugin/type.js';
 //   // fileWatcher.watchConfigs(handleFileChange);
 // }
 
+async function findNodeModulesRecursively(rootPath: string): Promise<string[]> {
+  const result: string[] = [];
+
+  async function traverse(currentPath: string) {
+    const items = await fs.readdir(currentPath);
+    for (const item of items) {
+      const fullPath = path.join(currentPath, item);
+      const stats = await fs.stat(fullPath);
+
+      if (stats.isDirectory()) {
+        if (item === 'node_modules') {
+          result.push(fullPath);
+        } else {
+          await traverse(fullPath);
+        }
+      }
+    }
+  }
+
+  await traverse(rootPath);
+  return result;
+}
+
+export async function createInlineCompiler(
+  config: ResolvedUserConfig,
+  options = {}
+) {
+  const { Compiler } = await import('./compiler/index.js');
+  return new Compiler({
+    config: { ...config.compilation, ...options },
+    jsPlugins: config.jsPlugins,
+    rustPlugins: config.rustPlugins
+  });
+}
+
+async function copyPublicDirectory(
+  resolvedUserConfig: ResolvedUserConfig
+): Promise<void> {
+  const absPublicDirPath = normalizePublicDir(
+    resolvedUserConfig.root,
+    resolvedUserConfig.publicDir
+  );
+
+  try {
+    if (await fse.pathExists(absPublicDirPath)) {
+      const files = await fse.readdir(absPublicDirPath);
+      const outputPath = resolvedUserConfig.compilation.output.path;
+      for (const file of files) {
+        const publicFile = path.join(absPublicDirPath, file);
+        const destFile = path.join(outputPath, file);
+
+        if (await fse.pathExists(destFile)) {
+          continue;
+        }
+        await fse.copy(publicFile, destFile);
+      }
+
+      resolvedUserConfig.logger.info(
+        `Public directory resources copied ${colors.bold(
+          colors.green('successfully')
+        )}.`
+      );
+    }
+  } catch (error) {
+    resolvedUserConfig.logger.error(
+      `Error copying public directory: ${error.message}`
+    );
+  }
+}
+
+export function logFileChanges(files: string[], root: string, logger: Logger) {
+  const changedFiles = files
+    .map((file) => path.relative(root, file))
+    .join(', ');
+  logger.info(
+    colors.bold(colors.green(`${changedFiles} changed, server will restart.`))
+  );
+}
+
+export { defineFarmConfig as defineConfig } from './config/index.js';
+
+export { loadEnv, Server };
+
+export async function start(
+  inlineConfig?: FarmCliOptions & UserConfig
+): Promise<void> {
+  inlineConfig = inlineConfig ?? {};
+  setProcessEnv('development');
+  const server = new Server(inlineConfig);
+  try {
+    await server.createServer();
+
+    server.listen();
+  } catch (error) {
+    server.logger.error('Failed to start the server', { exit: false, error });
+  }
+}
+
+export async function build(
+  inlineConfig?: FarmCliOptions & UserConfig
+): Promise<void> {
+  inlineConfig = inlineConfig ?? {};
+  setProcessEnv('production');
+
+  const resolvedUserConfig = await resolveConfig(
+    inlineConfig,
+    'build',
+    'production',
+    'production'
+  );
+
+  const { persistentCache, output } = resolvedUserConfig.compilation;
+
+  try {
+    const compiler = await createCompiler(resolvedUserConfig);
+    await resolveConfigureCompilerHook(resolvedUserConfig);
+
+    if (output?.clean) {
+      compiler.removeOutputPathDir();
+    }
+    const startTime = performance.now();
+    await compiler.compile();
+    const elapsedTime = Math.floor(performance.now() - startTime);
+    const persistentCacheText = persistentCache
+      ? bold(PersistentCacheBrand)
+      : '';
+
+    compiler.writeResourcesToDisk();
+    resolvedUserConfig.logger.info(
+      `Build completed in ${bold(
+        green(`${elapsedTime}ms`)
+      )} ${persistentCacheText} Resources emitted to ${bold(green(output.path))}.`
+    );
+    await copyPublicDirectory(resolvedUserConfig);
+  } catch (err) {
+    resolvedUserConfig.logger.error(`Failed to build: ${err}`, { exit: true });
+  }
+}
+
 export async function clean(
   rootPath: string,
   recursive?: boolean | undefined
@@ -255,168 +362,4 @@ export async function clean(
       }
     })
   );
-}
-
-async function findNodeModulesRecursively(rootPath: string): Promise<string[]> {
-  const result: string[] = [];
-
-  async function traverse(currentPath: string) {
-    const items = await fs.readdir(currentPath);
-    for (const item of items) {
-      const fullPath = path.join(currentPath, item);
-      const stats = await fs.stat(fullPath);
-
-      if (stats.isDirectory()) {
-        if (item === 'node_modules') {
-          result.push(fullPath);
-        } else {
-          await traverse(fullPath);
-        }
-      }
-    }
-  }
-
-  await traverse(rootPath);
-  return result;
-}
-
-// export async function createBundleHandler(
-//   resolvedUserConfig: ResolvedUserConfig,
-//   logger: Logger,
-//   watchMode = false
-// ) {
-//   const compiler = await createCompiler(resolvedUserConfig, logger);
-
-//   await compilerHandler(
-//     async () => {
-//       if (resolvedUserConfig.compilation?.output?.clean) {
-//         compiler.removeOutputPathDir();
-//       }
-
-//       try {
-//         await compiler.compile();
-//       } catch (err) {
-//         // throw new Error(logError(err) as unknown as string);
-//         throw new Error(err as unknown as string);
-//       }
-//       compiler.writeResourcesToDisk();
-//     },
-//     resolvedUserConfig,
-//     logger
-//   );
-
-//   if (resolvedUserConfig.compilation?.watch || watchMode) {
-//     const watcher = new FileWatcher(compiler, resolvedUserConfig, logger);
-//     await watcher.watch();
-//     return watcher;
-//   }
-// }
-
-export async function createCompiler(
-  resolvedUserConfig: ResolvedUserConfig,
-  logger: Logger
-) {
-  const compiler = initInlineCompiler(resolvedUserConfig, logger);
-  // TODO 这也不对 这块要 先排序 然后过滤掉对应的 存在这个钩子的插件 然后进而调用一些 like e.g 中间件
-  // 这块逻辑也需要过滤 拿到最新的
-  for (const plugin of resolvedUserConfig.jsPlugins) {
-    await plugin.configureCompiler?.(compiler);
-  }
-
-  return compiler;
-}
-
-export function initInlineCompiler(
-  resolvedUserConfig: ResolvedUserConfig,
-  logger: Logger
-) {
-  const {
-    jsPlugins,
-    rustPlugins,
-    compilation: compilationConfig
-  } = resolvedUserConfig;
-
-  const compiler = new Compiler(
-    {
-      config: compilationConfig,
-      jsPlugins,
-      rustPlugins
-    },
-    logger
-  );
-  return compiler;
-}
-
-export async function createInlineCompiler(
-  config: ResolvedUserConfig,
-  options = {}
-) {
-  const { Compiler } = await import('./compiler/index.js');
-  return new Compiler({
-    config: { ...config.compilation, ...options },
-    jsPlugins: config.jsPlugins,
-    rustPlugins: config.rustPlugins
-  });
-}
-
-async function copyPublicDirectory(
-  resolvedUserConfig: ResolvedUserConfig,
-  logger: Logger
-): Promise<void> {
-  const absPublicDirPath = normalizePublicDir(
-    resolvedUserConfig.root,
-    resolvedUserConfig.publicDir
-  );
-
-  try {
-    if (await fse.pathExists(absPublicDirPath)) {
-      const files = await fse.readdir(absPublicDirPath);
-      const outputPath = resolvedUserConfig.compilation.output.path;
-      for (const file of files) {
-        const publicFile = path.join(absPublicDirPath, file);
-        const destFile = path.join(outputPath, file);
-
-        if (await fse.pathExists(destFile)) {
-          continue;
-        }
-        await fse.copy(publicFile, destFile);
-      }
-
-      logger.info(
-        `Public directory resources copied ${colors.bold(
-          colors.green('successfully')
-        )}.`
-      );
-    }
-  } catch (error) {
-    logger.error(`Error copying public directory: ${error.message}`);
-  }
-}
-
-export function logFileChanges(files: string[], root: string, logger: Logger) {
-  const changedFiles = files
-    .map((file) => path.relative(root, file))
-    .join(', ');
-  logger.info(
-    colors.bold(colors.green(`${changedFiles} changed, server will restart.`))
-  );
-}
-
-export { defineFarmConfig as defineConfig } from './config/index.js';
-
-export { loadEnv, Server };
-
-export async function start(
-  inlineConfig?: FarmCliOptions & UserConfig
-): Promise<void> {
-  inlineConfig = inlineConfig ?? {};
-  setProcessEnv('development');
-  const server = new Server(inlineConfig);
-  try {
-    await server.createServer();
-
-    server.listen();
-  } catch (error) {
-    server.logger.error('Failed to start the server', { exit: false, error });
-  }
 }

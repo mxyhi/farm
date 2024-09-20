@@ -41,6 +41,7 @@ export class HmrClient {
     // when the user save the file, the server will recompile the file(and its dependencies as long as its dependencies are changed)
     // after the file is recompiled, the server will generated a update resource and send its id to the client
     // the client will apply the update
+
     socket.addEventListener('message', (event) => {
       const result: HMRPayload = new Function(`return (${event.data})`)();
       if (result?.type === 'closing') {
@@ -69,6 +70,7 @@ export class HmrClient {
       logger.debug(
         'disconnected from the server, Please refresh the page manually. If you still encounter errors, this may be a farm bug. Please submit an issue. https://github.com/farm-fe/farm/issues'
       );
+
       await waitForSuccessfulPing(socketProtocol, `${socketHostUrl}`);
       location.reload();
     });

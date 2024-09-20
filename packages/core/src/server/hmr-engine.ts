@@ -66,56 +66,59 @@ export class HmrEngine {
         updatedFilesStr.slice(0, 100) + `...(${queue.length} files)`;
     }
 
-    try {
-      // we must add callback before update
-      this.app.compiler.onUpdateFinish(async () => {
-        // if there are more updates, recompile again
-        if (this._updateQueue.length > 0) {
-          await this.recompileAndSendResult();
-        }
-        if (this.app.resolvedUserConfig?.server.writeToDisk) {
-          this.app.compiler.writeResourcesToDisk();
-        }
-      });
-
-      checkClearScreen(this.app.compiler.config.config);
-      const start = performance.now();
-      const result = await this.app.compiler.update(queue);
-      this.app.logger.info(
-        `${bold(lightCyan(updatedFilesStr))} updated in ${bold(
-          green(formatExecutionTime(performance.now() - start, 's'))
-        )}`
-      );
-
-      // clear update queue after update finished
-      this._updateQueue = this._updateQueue.filter(
-        (item) => !queue.includes(item)
-      );
-
-      let dynamicResourcesMap: Record<string, Resource[]> = null;
-
-      if (result.dynamicResourcesMap) {
-        for (const [key, value] of Object.entries(result.dynamicResourcesMap)) {
-          if (!dynamicResourcesMap) {
-            dynamicResourcesMap = {} as Record<string, Resource[]>;
-          }
-
-          // @ts-ignore
-          dynamicResourcesMap[key] = value.map((r) => ({
-            path: r[0],
-            type: r[1] as 'script' | 'link'
-          }));
-        }
+    // try {
+    // we must add callback before update
+    this.app.compiler.onUpdateFinish(async () => {
+      // if there are more updates, recompile again
+      if (this._updateQueue.length > 0) {
+        await this.recompileAndSendResult();
       }
-      const {
-        added,
-        changed,
-        removed,
-        immutableModules,
-        mutableModules,
-        boundaries
-      } = result;
-      const resultStr = `{
+      if (this.app.resolvedUserConfig?.server.writeToDisk) {
+        this.app.compiler.writeResourcesToDisk();
+      }
+    });
+
+    const start = performance.now();
+    console.log(queue);
+
+    const result = await this.app.compiler.update(queue);
+
+    this.app.logger.info(
+      `${bold(lightCyan(updatedFilesStr))} updated in ${bold(
+        green(formatExecutionTime(performance.now() - start, 's'))
+      )}`,
+      true
+    );
+
+    // clear update queue after update finished
+    this._updateQueue = this._updateQueue.filter(
+      (item) => !queue.includes(item)
+    );
+
+    let dynamicResourcesMap: Record<string, Resource[]> = null;
+
+    if (result.dynamicResourcesMap) {
+      for (const [key, value] of Object.entries(result.dynamicResourcesMap)) {
+        if (!dynamicResourcesMap) {
+          dynamicResourcesMap = {} as Record<string, Resource[]>;
+        }
+
+        // @ts-ignore
+        dynamicResourcesMap[key] = value.map((r) => ({
+          path: r[0],
+          type: r[1] as 'script' | 'link'
+        }));
+      }
+    }
+    const {
+      added,
+      changed,
+      removed,
+      immutableModules,
+      mutableModules,
+      boundaries
+    } = result;
+    const resultStr = `{
         added: [${formatHmrResult(added)}],
         changed: [${formatHmrResult(changed)}],
         removed: [${formatHmrResult(removed)}],
@@ -125,27 +128,26 @@ export class HmrEngine {
         dynamicResourcesMap: ${JSON.stringify(dynamicResourcesMap)}
       }`;
 
-      this.callUpdates(result);
+    this.callUpdates(result);
 
-      this.app.ws.wss.clients.forEach((client: WebSocketClient) => {
-        // @ts-ignore
-        client.send(`
+    this.app.ws.wss.clients.forEach((client: WebSocketClient) => {
+      // @ts-ignore
+      client.send(`
         {
           type: 'farm-update',
           result: ${resultStr}
         }
       `);
-      });
-    } catch (err) {
-      // checkClearScreen(this.app.compiler.config.config);
-      this.app.logger.error(convertErrorMessage(err));
-      // throw new Error(err);
-    }
+    });
+    // } catch (err) {
+    // checkClearScreen(this.app.compiler.config.config);
+    // this.app.logger.error(convertErrorMessage(err));
+
+    // }
   };
 
   async hmrUpdate(absPath: string | string[], force = false) {
     const paths = Array.isArray(absPath) ? absPath : [absPath];
-
     for (const path of paths) {
       if (
         this.app.compiler.hasModule(path) &&
@@ -174,6 +176,7 @@ export class HmrEngine {
         const errorStr = `${JSON.stringify({
           message: serialization
         })}`;
+
         this.app.ws.wss.clients.forEach((client: WebSocketClient) => {
           // @ts-ignore
           // client.rawSend(`
@@ -181,11 +184,15 @@ export class HmrEngine {
             {
               type: 'error',
               err: ${errorStr},
-              overlay: ${(this.app.resolvedUserConfig.server.hmr as UserHmrConfig).overlay}
+              overlay: ${
+                (this.app.resolvedUserConfig.server.hmr as UserHmrConfig)
+                  .overlay
+              }
             }
           `);
         });
-        this.app.logger.error(convertErrorMessage(e));
+
+        this.app.logger.error(convertErrorMessage(e), true);
         // throw new Error(`hmr update failed: ${e.stack}`);
       }
     }

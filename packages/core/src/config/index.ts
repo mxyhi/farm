@@ -969,7 +969,11 @@ export async function resolveUserConfig(
   resolvedUserConfig.env = {
     ...userEnv,
     NODE_ENV: userConfig.compilation.mode,
-    mode
+    // TODO publicPath rewrite to BASE_URL
+    BASE_URL: userConfig.compilation.output.publicPath ?? '/',
+    mode,
+    DEV: mode === 'development',
+    PROD: mode === 'production'
   };
 
   resolvedUserConfig.publicDir = normalizePublicDir(

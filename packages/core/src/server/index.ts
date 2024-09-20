@@ -4,14 +4,7 @@ import connect from 'connect';
 import corsMiddleware from 'cors';
 
 import { Compiler } from '../compiler/index.js';
-import {
-  bold,
-  colors,
-  createCompiler,
-  getShortName,
-  green,
-  resolveConfig
-} from '../index.js';
+import { bold, colors, getShortName, green, resolveConfig } from '../index.js';
 import Watcher from '../watcher/index.js';
 import { HmrEngine } from './hmr-engine.js';
 import { httpServer } from './http.js';
@@ -23,7 +16,7 @@ import { getSortedPluginHooksBindThis } from '../plugin/index.js';
 import { getCacheDir, isCacheDirExists } from '../utils/cacheDir.js';
 import { createDebugger } from '../utils/debug.js';
 import { resolveServerUrls, teardownSIGTERMListener } from '../utils/http.js';
-import { Logger, bootstrap, logger, printServerUrls } from '../utils/logger.js';
+import { Logger, bootstrap, printServerUrls } from '../utils/logger.js';
 import { initPublicFiles } from '../utils/publicDir.js';
 import { arrayEqual, isObject, normalizePath } from '../utils/share.js';
 
@@ -47,6 +40,10 @@ import type {
 import type { Http2SecureServer } from 'node:http2';
 import type * as net from 'node:net';
 
+import {
+  createCompiler,
+  resolveConfigureCompilerHook
+} from '../compiler/utils.js';
 import type {
   FarmCliOptions,
   HmrOptions,
@@ -122,6 +119,7 @@ export class Server extends httpServer {
   resolvedUserConfig: ResolvedUserConfig;
   closeHttpServerFn: () => Promise<void>;
   postConfigureServerHooks: ((() => void) | void)[] = [];
+  logger: Logger;
   /**
    * Creates an instance of Server.
    * @param {FarmCliOptions & UserConfig} inlineConfig - The inline configuration options.
@@ -129,6 +127,7 @@ export class Server extends httpServer {
    */
   constructor(readonly inlineConfig: FarmCliOptions & UserConfig) {
     super();
+    this.logger = new Logger();
   }
 
   /**
@@ -153,9 +152,9 @@ export class Server extends httpServer {
         this.inlineConfig,
         'start',
         'development',
-        'development',
-        false
+        'development'
       );
+      this.logger = this.resolvedUserConfig.logger;
 
       this.#resolveOptions();
 
@@ -200,9 +199,9 @@ export class Server extends httpServer {
         });
       }
     } catch (error) {
-      this.resolvedUserConfig.logger.error(
-        `Failed to create farm server: ${error}`
-      );
+      // this.logger.error(
+      //   `Failed to create farm server: ${error}`
+      // );
       throw error;
     }
   }
@@ -214,6 +213,18 @@ export class Server extends httpServer {
     this.watcher = new Watcher(this.resolvedUserConfig);
 
     await this.watcher.createWatcher();
+
+    this.watcher.watcher.on('add', async (file: string | string[] | any) => {
+      // TODO pluginContainer hooks
+    });
+
+    this.watcher.watcher.on('unlink', async (file: string | string[] | any) => {
+      const parentFiles = this.compiler.getParentFiles(file);
+      const normalizeParentFiles = parentFiles.map((file) =>
+        normalizePath(file)
+      );
+      this.hmrEngine.hmrUpdate(normalizeParentFiles, true);
+    });
 
     this.watcher.watcher.on('change', async (file: string | string[] | any) => {
       file = normalizePath(file);
@@ -228,18 +239,18 @@ export class Server extends httpServer {
       );
       if (isConfigFile || isConfigDependencyFile || isEnvFile) {
         __FARM_GLOBAL__.__FARM_RESTART_DEV_SERVER__ = true;
-        this.resolvedUserConfig.logger.info(
+        this.logger.info(
           `${bold(green(shortFile))} changed, Server is being restarted`,
           true
         );
         debugServer?.(`[config change] ${colors.dim(file)}`);
         try {
           await this.restartServer();
+          return;
         } catch (e) {
           this.resolvedUserConfig.logger.error(`restart server error ${e}`);
         }
       }
-
       try {
         this.hmrEngine.hmrUpdate(file);
       } catch (error) {
@@ -280,6 +291,7 @@ export class Server extends httpServer {
     }
     const { port: prevPort, host: prevHost } = this.serverOptions;
     const prevUrls = this.resolvedUrls;
+
     await this.restart();
 
     const { port, host } = this.serverOptions;
@@ -315,18 +327,18 @@ export class Server extends httpServer {
    * Restarts the server.
    */
   async restart() {
-    // TODO 这里是如果createServer 新建 newServer 都完事了 才去关闭旧的 server 这样可以保证原来的 watcher 继续运行 这里不应该先关闭所有 watcher
-    await this.close();
+    let newServer: Server = null;
     try {
-      await this.createServer();
+      await this.close();
+      newServer = new Server(this.inlineConfig);
+      await newServer.createServer();
     } catch (error) {
-      this.resolvedUserConfig.logger.error(
-        `Failed to resolve user config: ${error}`
-      );
+      this.logger.error(`Failed to restart server :\n ${error}`);
       return;
     }
-
-    this.listen();
+    await this.watcher.close();
+    await newServer.listen();
+    this.logger.info(bold(green('Server restarted successfully')));
   }
 
   /**
@@ -364,7 +376,7 @@ export class Server extends httpServer {
    */
   async listen(): Promise<void> {
     if (!this.httpServer) {
-      this.resolvedUserConfig.logger.warn('HTTP server is not created yet');
+      this.logger.warn('HTTP server is not created yet');
       return;
     }
     const { port, hostname, open, strictPort } = this.serverOptions;
@@ -379,8 +391,8 @@ export class Server extends httpServer {
       this.resolvedUserConfig.compilation.define.FARM_HMR_PORT =
         serverPort.toString();
 
-      this.compiler = await createCompiler(this.resolvedUserConfig, logger);
-
+      this.compiler = await createCompiler(this.resolvedUserConfig);
+      await resolveConfigureCompilerHook(this.resolvedUserConfig);
       // compile the project and start the dev server
       await this.#startCompile();
 
@@ -548,6 +560,7 @@ export class Server extends httpServer {
       this.middlewares.use(adaptorViteMiddleware(this));
     }
 
+    // TODO server post hooks not work bug!
     this.postConfigureServerHooks.forEach((fn) => fn && fn());
 
     // TODO todo add appType 这块要判断 单页面还是 多页面 多 html 处理不一样
@@ -600,6 +613,7 @@ export class Server extends httpServer {
     );
     const start = performance.now();
     await this.#compile();
+
     const duration = performance.now() - start;
     bootstrap(
       duration,
@@ -633,7 +647,10 @@ export class Server extends httpServer {
         `HMR invalidate: ${path}. ${message ?? ''} `
       );
       const parentFiles = this.compiler.getParentFiles(path);
-      this.hmrEngine.hmrUpdate(parentFiles, true);
+      const normalizeParentFiles = parentFiles.map((file) =>
+        normalizePath(file)
+      );
+      this.hmrEngine.hmrUpdate(normalizeParentFiles, true);
     });
   }
   async closeServerAndExit() {
@@ -694,7 +711,7 @@ export class Server extends httpServer {
       teardownSIGTERMListener(this.closeServerAndExit);
     }
 
-    await Promise.allSettled([this.watcher.close(), this.closeHttpServerFn()]);
+    await Promise.allSettled([this.ws.wss.close(), this.closeHttpServerFn()]);
   }
 
   async displayServerUrls() {
