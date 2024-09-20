@@ -162,7 +162,7 @@ export class Server extends httpServer {
         this.serverOptions.https
       );
       this.publicFiles = await this.#handlePublicFiles();
-      this.middlewares = connect() as connect.Server;
+      this.middlewares = connect();
       this.httpServer = this.serverOptions.middlewareMode
         ? null
         : await this.resolveHttpServer(
