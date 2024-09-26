@@ -2,14 +2,11 @@ import { SecureServerOptions } from 'node:http2';
 import { Server } from '../index.js';
 
 import type { OutgoingHttpHeaders } from 'http';
-import type cors from '@koa/cors';
 import { WatchOptions } from 'chokidar';
-import type { Options } from 'http-proxy-middleware';
-import { Middleware } from 'koa';
 import type { RustPlugin } from '../plugin/rust/index.js';
 import type { JsPlugin } from '../plugin/type.js';
 import { HMRChannel } from '../server/hmr.js';
-import type { Config } from '../types/binding.js';
+import type { Config, CssConfig } from '../types/binding.js';
 import type { Logger } from '../utils/index.js';
 
 // export interface HmrOptions {
@@ -41,8 +38,6 @@ export interface ConfigEnv {
   isPreview: boolean;
 }
 
-export type ProxyOptions = Options;
-
 export type UserConfigFnPromise = (env: ConfigEnv) => Promise<UserConfig>;
 export type UserConfigFn = (env: ConfigEnv) => UserConfig | Promise<UserConfig>;
 export type UserConfigFnObject = (env: ConfigEnv) => UserConfig;
@@ -62,11 +57,11 @@ export interface UserServerConfig {
   hostname?: { name: string; host: string | undefined };
   // http2?: boolean;
   hmr?: boolean | UserHmrConfig;
-  proxy?: Record<string, Options>;
+  proxy?: Record<string, any>;
   strictPort?: boolean;
   open?: boolean;
   host?: string | boolean;
-  cors?: boolean | cors.Options;
+  cors?: boolean | any;
   // whether to serve static assets in spa mode, default to true
   spa?: boolean;
   middlewares?: DevServerMiddleware[];
@@ -119,6 +114,7 @@ export interface UserConfig {
   envDir?: string;
   envPrefix?: string | string[];
   publicDir?: string;
+  timeUnit?: 'ms' | 's';
   formatTimer?: 'ms' | 's';
   /** js plugin(which is a javascript object) and rust plugin(which is string refer to a .farm file or a package) */
   plugins?: (RustPlugin | JsPlugin | JsPlugin[] | undefined | null | false)[];
@@ -139,6 +135,18 @@ export interface UserConfig {
   logger?: Logger;
 }
 
+interface ResolvedCss extends CssConfig {
+  modules?: CssConfig['modules'] & {
+    localsConversion?: never;
+  };
+}
+
+interface ResolvedCss extends CssConfig {
+  modules?: CssConfig['modules'] & {
+    localsConversion?: never;
+  };
+}
+
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface ResolvedCompilation
   extends Exclude<Config['config'], undefined> {
@@ -146,6 +154,7 @@ export interface ResolvedCompilation
   resolve?: {
     dedupe?: never;
   } & Config['config']['resolve'];
+  css?: ResolvedCss;
 }
 
 export interface ResolvedUserConfig extends UserConfig {
@@ -157,6 +166,7 @@ export interface ResolvedUserConfig extends UserConfig {
   envPrefix?: string | string[];
   configFilePath?: string;
   envMode?: string;
+  timeUnit?: 'ms' | 's';
   configFileDependencies?: string[];
   compilation?: ResolvedCompilation;
   server?: NormalizedServerConfig;
@@ -211,7 +221,7 @@ export interface FarmCliOptions
   clearScreen?: boolean;
 }
 
-export type DevServerMiddleware = (context: Server) => Middleware | undefined;
+export type DevServerMiddleware = (context: Server) => any | undefined;
 
 export interface Alias {
   // TODO support RegExp

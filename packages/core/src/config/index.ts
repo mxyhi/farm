@@ -54,6 +54,7 @@ import {
   FARM_DEFAULT_NAMESPACE
 } from './constants.js';
 import { mergeConfig, mergeFarmCliConfig } from './mergeConfig.js';
+import { normalizeCss } from './normalize-config/normalize-css.js';
 import { normalizeExternal } from './normalize-config/normalize-external.js';
 import { normalizeResolve } from './normalize-config/normalize-resolve.js';
 import type {
@@ -261,7 +262,7 @@ export async function normalizeUserCompilationConfig(
   mode: CompilationMode = 'development',
   logger: Logger = new Logger()
 ): Promise<ResolvedCompilation> {
-  const { compilation, root, clearScreen } = resolvedUserConfig;
+  const { compilation, root } = resolvedUserConfig;
 
   // resolve root path
 
@@ -281,9 +282,6 @@ export async function normalizeUserCompilationConfig(
     {
       input: inputIndexConfig,
       root: resolvedRootPath
-    },
-    {
-      clearScreen
     },
     compilation
   );
@@ -531,7 +529,7 @@ export async function normalizeUserCompilationConfig(
   );
 
   normalizeResolve(resolvedUserConfig, resolvedCompilation);
-
+  normalizeCss(resolvedUserConfig, resolvedCompilation);
   return resolvedCompilation;
 }
 
@@ -801,8 +799,8 @@ export async function loadConfigFile(
     // `Failed to load farm config file: ${errorMessage}. \n ${potentialSolution} \n ${error.stack}`
     // );
     throw new Error(
-      // `Failed to load farm config file: ${errorMessage}. \n ${potentialSolution} \n ${error.stack}`
-      `Failed to load farm config file: ${errorMessage}.`
+      `Failed to load farm config file: ${errorMessage}. \n ${potentialSolution} \n ${error.stack}`
+      // `Failed to load farm config file: ${errorMessage}.`,
     );
   }
 }

@@ -4,36 +4,36 @@ import react from "@farmfe/plugin-react";
 export default defineConfig({
   plugins: [
     react(),
-    myCustomPlugin(),
+    // myCustomPlugin(),
     compilerPlugin(),
   ],
   compilation: {
     // persistentCache: false,
-    progress: false,
     output: {
       // publicPath: "/aaa/",
-    }
+    },
   },
+  timeUnit: "s",
   server: {},
 });
 
-
 function myCustomPlugin() {
   return {
-    name: 'custom',
+    name: "custom",
     updateModules: {
       executor(data: any) {
         console.log(data, "更新的模块");
       },
     },
-  }
+  };
 }
+
 
 function compilerPlugin() {
   return {
-    name: 'compiler',
+    name: "compiler",
     configureCompiler(compiler: any) {
-      console.log(compiler.compile, "compiler");
+      // console.log(compiler, "compiler")
     },
-  }
+  };
 }

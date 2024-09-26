@@ -340,7 +340,9 @@ const compilationConfigSchema = z
           .union([
             z.null(),
             z.object({
-              indentName: z.string().optional()
+              indentName: z.string().optional(),
+              localsConversion: z.string().optional(),
+              paths: z.array(z.string()).optional()
             })
           ])
 
@@ -397,6 +399,7 @@ const FarmConfigSchema = z
     clearScreen: z.boolean().optional(),
     configPath: z.string().optional(),
     envDir: z.string().optional(),
+    timeUnit: z.union([z.literal('ms'), z.literal('s')]).optional(),
     envPrefix: z.union([z.string(), z.array(z.string())]).optional(),
     publicDir: z.string().optional(),
     formatTimer: z.enum(['ms', 's']).optional(),
