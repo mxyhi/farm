@@ -2,6 +2,7 @@ import { ServerOptions } from 'node:https';
 import path from 'node:path';
 import connect from 'connect';
 import { resolveConfig } from '../config/index.js';
+import { mergeConfig } from '../config/mergeConfig.js';
 import {
   FarmCliOptions,
   UserConfig,
@@ -13,7 +14,6 @@ import { CommonServerOptions, httpServer } from './http.js';
 
 class PreviewServer extends httpServer {
   previewOptions: UserPreviewServerConfig;
-  serverOptions: UserConfig['server'];
   httpsOptions: ServerOptions;
   publicPath?: string;
   publicDir?: string;
@@ -74,10 +74,12 @@ class PreviewServer extends httpServer {
 
     this.#resolvePreviewOptions();
 
-    this.httpsOptions = await this.resolveHttpsConfig(this.serverOptions.https);
+    this.httpsOptions = await this.resolveHttpsConfig(
+      this.previewOptions.https
+    );
     // this.publicFiles
     this.middlewares = connect();
-    this.httpServer = this.serverOptions.middlewareMode
+    this.httpServer = this.previewOptions.middlewareMode
       ? null
       : await this.resolveHttpServer(
           this.previewOptions as CommonServerOptions,
@@ -113,7 +115,10 @@ class PreviewServer extends httpServer {
   }
 
   #resolvePreviewOptions() {
-    this.previewOptions = this.inlineConfig.preview;
+    this.previewOptions = mergeConfig(
+      this.resolvedUserConfig.server,
+      this.resolvedUserConfig.preview
+    );
 
     const { root, compilation, server } = this.resolvedUserConfig;
 
@@ -125,8 +130,6 @@ class PreviewServer extends httpServer {
       this.previewOptions.output?.publicPath || compilation.output.publicPath;
     this.publicDir =
       this.previewOptions.distDir || compilation.assets.publicDir;
-
-    this.serverOptions = server;
   }
 
   // TODO: maybe migrate to utils? This method is
@@ -144,8 +147,6 @@ class PreviewServer extends httpServer {
         this.previewOptions.host,
         this.resolvedUserConfig.logger
       );
-    } else if (this.serverOptions.middlewareMode) {
-      throw new Error('cannot print server URLs in middleware mode.');
     } else {
       throw new Error(
         'cannot print server URLs before server.listen is called.'
