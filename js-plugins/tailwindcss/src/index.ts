@@ -68,6 +68,7 @@ export default function tailwindcss(): JsPlugin[] {
         }
 
         roots.get(id).requiresRebuild = false;
+        console.log('hmr update', { id });
         server.hmrEngine?.hmrUpdate(id, true);
       }
     }
@@ -94,10 +95,10 @@ export default function tailwindcss(): JsPlugin[] {
         minify = !!config.compilation?.minify;
 
         return {
-          compilation: {
-            // TODO: should invalidate entry css file when config changes
-            persistentCache: false
-          }
+          // compilation: {
+          //   // TODO: should invalidate entry css file when config changes
+          //   persistentCache: false
+          // }
         };
       },
       configureDevServer(server) {

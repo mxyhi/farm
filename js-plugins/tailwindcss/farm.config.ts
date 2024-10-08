@@ -13,7 +13,11 @@ export default defineConfig({
     external: ['@farmfe/core', '@tailwindcss/oxide', 'lightningcss'],
     resolve: {
       autoExternalFailedResolve: true
-    }
+    },
+    mode: 'development',
+    minify: false,
+    lazyCompilation: false,
+    treeShaking: false
   },
   plugins: [dts()]
 });
